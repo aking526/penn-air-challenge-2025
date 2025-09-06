@@ -17,6 +17,17 @@ def main():
         choices=[1, 2, 3, 4, 5, 6], 
         help="The part of the challenge to run"
     )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save processed video output to MP4 (parts 2 and 3)"
+    )
+    parser.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help="Optional output MP4 path; defaults per input video"
+    )
 
     _fn = [
         core.part_1,
@@ -29,7 +40,12 @@ def main():
     args = parser.parse_args()
     try:
         logging.info(f"Executing part {args.part}")
-        _fn[args.part - 1]()
+        if args.part == 2:
+            core.part_2(save=args.save, output_path=args.out)
+        elif args.part == 3:
+            core.part_3(save=args.save, output_path=args.out)
+        else:
+            _fn[args.part - 1]()
     except IndexError:
         logging.error(f"Part {args.part} is not implemented")
         return
