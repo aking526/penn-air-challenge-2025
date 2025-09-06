@@ -66,8 +66,8 @@ class Processor:
             return mask, dist_u8, float(otsu_t)
         return mask
     
-    def _find_contours(self, mask, include_holes=False):
-        mode = cv2.RETR_TREE if include_holes else cv2.RETR_EXTERNAL
+    def _find_contours(self, mask):
+        mode = cv2.RETR_EXTERNAL
         # Use SIMPLE to drop redundant points early
         method = cv2.CHAIN_APPROX_SIMPLE
         out = cv2.findContours(mask, mode, method)
@@ -91,8 +91,7 @@ class Processor:
             for cX, cY in centers:
                 # Draw the center of the shape on the image
                 cv2.circle(overlay, (cX, cY), 7, (255, 255, 255), -1)
-                cv2.putText(overlay, f"({cX}, {cY})", (cX - 40, cY - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                cv2.putText(overlay, f"({cX}, {cY})", (cX - 40, cY - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
         return overlay if is_bgr else cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
 
@@ -144,13 +143,16 @@ class Processor:
                 keep[labels == label] = 255
         return keep
     
-    def _approx_rdp(self, cnt, frac=0.02):
-        eps = frac * cv2.arcLength(cnt, True)
-        return cv2.approxPolyDP(cnt, eps, True)
+    # Ramer-Douglas-Peucker simplification
+    # https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm
+    # Actually appeared to be unnecessary, so just commented out
+    # def _approx_rdp(self, cnt, frac=0.02):
+    #     eps = frac * cv2.arcLength(cnt, True)
+    #     return cv2.approxPolyDP(cnt, eps, True)
 
     def _merge_collinear_vertices(self, poly_xy, angle_tol_deg=6.0, dist_tol=1.0):
         """
-        Remove vertices where the turn angle is ~180° (nearly straight) or
+        Remove vertices where the turn angle is ~180 (nearly straight) or
         where consecutive vertices are extremely close.
         Works on an (N,2) float array; returns an (M,2) float array.
         """
@@ -161,9 +163,7 @@ class Processor:
 
         keep = []
         for i in range(N):
-            p_prev = pts[(i - 1) % N]
-            p      = pts[i]
-            p_next = pts[(i + 1) % N]
+            p_prev, p, p_next = pts[(i - 1) % N], pts[i], pts[(i + 1) % N]
 
             # drop near-duplicate points
             if np.linalg.norm(p - p_prev) < dist_tol:
@@ -178,7 +178,7 @@ class Processor:
 
             cosang = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
             ang = np.degrees(np.arccos(cosang))  # 0..180
-            # If angle ~ 180°, it's almost straight -> drop it
+            # If angle ~ 180, it's almost straight -> drop it
             if abs(180.0 - ang) < angle_tol_deg:
                 continue
             keep.append(p)
@@ -193,10 +193,6 @@ class Processor:
         self,
         *,
         is_bgr=True,
-        manual_hsv_ranges=None,  # (kept for parity; not used in this quick fix path)
-        include_holes=False,
-        simplify=True,
-        approx_epsilon_frac=0.02,   # <-- more aggressive default
         min_area=150.0,             # <-- base absolute area threshold for contours
         min_area_frac=None,         # <-- optional fractional area threshold (of frame area)
         return_edge_mask=False,
@@ -209,9 +205,7 @@ class Processor:
         angle_tol_deg=6.0,
         dist_tol=1.0,
         # Quality filters (robust across videos; conservative defaults)
-        use_quality_filters=True,
         min_solidity=0.55,          # area / convexHull(area)
-        min_circularity=0.0,        # 4πA / P^2; set >0 to enable
         contrast_margin_u8=8,       # require mean LAB-distance ≥ otsu+margin inside contour
     ):
         # 1) Build initial mask (auto background separation)
@@ -231,7 +225,7 @@ class Processor:
             edge_mask = cv2.morphologyEx(mask, cv2.MORPH_GRADIENT, kernel)
 
         # 4) Contours (SIMPLE reduces redundant points)
-        contours, hierarchy = self._find_contours(mask, include_holes=include_holes)
+        contours, hierarchy = self._find_contours(mask)
 
         # 5) Filter, simplify, and straighten polygons
         cleaned = []
@@ -248,29 +242,21 @@ class Processor:
                 continue
 
             # Optional quality filters to reject non-shapes
-            if use_quality_filters:
-                # Solidity
-                hull = cv2.convexHull(c)
-                hull_area = float(cv2.contourArea(hull))
-                solidity = (area_c / hull_area) if hull_area > 1e-6 else 0.0
-                if solidity < float(min_solidity):
+            # Solidity
+            hull = cv2.convexHull(c)
+            hull_area = float(cv2.contourArea(hull))
+            solidity = (area_c / hull_area) if hull_area > 1e-6 else 0.0
+            if solidity < float(min_solidity):
+                continue
+
+            # Low-contrast rejector relative to background distance
+            if contrast_margin_u8 and float(contrast_margin_u8) > 0.0:
+                contour_mask = np.zeros((H, W), dtype=np.uint8)
+                cv2.drawContours(contour_mask, [c], -1, 255, thickness=cv2.FILLED)
+                masked_vals = dist_u8[contour_mask > 0]
+                mean_dist = float(masked_vals.mean()) if masked_vals.size > 0 else 0.0
+                if mean_dist < (float(otsu_t) + float(contrast_margin_u8)):
                     continue
-
-                # Circularity (disabled by default)
-                if min_circularity and float(min_circularity) > 0.0:
-                    perim = float(cv2.arcLength(c, True))
-                    circ = (4.0 * np.pi * area_c / (perim * perim)) if perim > 1e-6 else 0.0
-                    if circ < float(min_circularity):
-                        continue
-
-                # Low-contrast rejector relative to background distance
-                if contrast_margin_u8 and float(contrast_margin_u8) > 0.0:
-                    contour_mask = np.zeros((H, W), dtype=np.uint8)
-                    cv2.drawContours(contour_mask, [c], -1, 255, thickness=cv2.FILLED)
-                    masked_vals = dist_u8[contour_mask > 0]
-                    mean_dist = float(masked_vals.mean()) if masked_vals.size > 0 else 0.0
-                    if mean_dist < (float(otsu_t) + float(contrast_margin_u8)):
-                        continue
 
             # Calculate the center of the contour
             M = cv2.moments(c)
@@ -280,8 +266,8 @@ class Processor:
                 centers.append((cX, cY))
 
             c_use = c
-            if simplify:
-                c_use = self._approx_rdp(c_use, approx_epsilon_frac)
+            # if simplify:
+            #     c_use = self._approx_rdp(c_use, approx_epsilon_frac)
             poly = c_use.reshape(-1, 2).astype(np.float32)
             if merge_collinear and len(poly) >= 4:
                 poly = self._merge_collinear_vertices(poly, angle_tol_deg=angle_tol_deg, dist_tol=dist_tol)
@@ -305,9 +291,7 @@ def part_1() -> None:
     img = load_image("PennAir 2024 App Static.png")
     processor = Processor(img)
     outlines, debug = processor.process_frame(
-        is_bgr=False,
-        simplify=True,
-        approx_epsilon_frac=0.01,
+        is_bgr=False, # Why does this only work if is_bgr is False?
         return_edge_mask=True,
         smooth_px=7,
     )
@@ -348,8 +332,6 @@ def part_2(save: bool = False, output_path: str | None = None) -> None:
             processor = Processor(frame)
             outlines, debug = processor.process_frame(
                 is_bgr=True,
-                simplify=True,
-                approx_epsilon_frac=0.01,
                 return_edge_mask=False,
                 smooth_px=7,
                 # Suppress small speckles that flicker by using both absolute and fractional area
@@ -386,6 +368,8 @@ def part_2(save: bool = False, output_path: str | None = None) -> None:
         writer.release()
     cv2.destroyAllWindows()
 
+# ===== Part 3 =====
+
 def part_3(save: bool = False, output_path: str | None = None) -> None:
     video_path = "PennAir 2024 App Dynamic Hard.mp4"
     cap = cv2.VideoCapture(video_path)
@@ -407,8 +391,6 @@ def part_3(save: bool = False, output_path: str | None = None) -> None:
             processor = Processor(frame)
             outlines, debug = processor.process_frame(
                 is_bgr=True,
-                simplify=True,
-                approx_epsilon_frac=0.01,
                 return_edge_mask=False,
                 smooth_px=7,
                 # Suppress small speckles that flicker by using both absolute and fractional area
