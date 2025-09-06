@@ -1,5 +1,5 @@
 import argparse
-import core
+import corev2 as core
 import logging
 
 logging.basicConfig(

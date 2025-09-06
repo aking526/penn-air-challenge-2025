@@ -27,7 +27,7 @@ def show_image(img: np.ndarray) -> None:
 
 # ========== Core Class ==========
 
-class Processor:
+class ProcessorV2:
     def __init__(self, img: np.ndarray):
         self.img = img
 
@@ -143,52 +143,6 @@ class Processor:
                 keep[labels == label] = 255
         return keep
     
-    # Ramer-Douglas-Peucker simplification
-    # https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm
-    # Actually appeared to be unnecessary, so just commented out
-    # def _approx_rdp(self, cnt, frac=0.02):
-    #     eps = frac * cv2.arcLength(cnt, True)
-    #     return cv2.approxPolyDP(cnt, eps, True)
-
-    # def _merge_collinear_vertices(self, poly_xy, angle_tol_deg=6.0, dist_tol=1.0):
-    #     """
-    #     Remove vertices where the turn angle is ~180 (nearly straight) or
-    #     where consecutive vertices are extremely close.
-    #     Works on an (N,2) float array; returns an (M,2) float array.
-    #     """
-    #     pts = poly_xy.astype(np.float32)
-    #     N = len(pts)
-    #     if N <= 3:
-    #         return pts
-    #
-    #     keep = []
-    #     for i in range(N):
-    #         p_prev, p, p_next = pts[(i - 1) % N], pts[i], pts[(i + 1) % N]
-    #
-    #         # drop near-duplicate points
-    #         if np.linalg.norm(p - p_prev) < dist_tol:
-    #             continue
-    #
-    #         v1 = p - p_prev
-    #         v2 = p_next - p
-    #         n1 = np.linalg.norm(v1)
-    #         n2 = np.linalg.norm(v2)
-    #         if n1 < 1e-6 or n2 < 1e-6:
-    #             keep.append(p); continue
-    #
-    #         cosang = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
-    #         ang = np.degrees(np.arccos(cosang))  # 0..180
-    #         # If angle ~ 180, it's almost straight -> drop it
-    #         if abs(180.0 - ang) < angle_tol_deg:
-    #             continue
-    #         keep.append(p)
-    #
-    #     keep = np.array(keep, dtype=np.float32)
-    #     # If we were too aggressive, fall back
-    #     if len(keep) < 3:
-    #         return pts
-    #     return keep
-
     def process_frame(
         self,
         *,
@@ -263,11 +217,7 @@ class Processor:
                 centers.append((cX, cY))
 
             c_use = c
-            # if simplify:
-            #     c_use = self._approx_rdp(c_use, approx_epsilon_frac)
             poly = c_use.reshape(-1, 2).astype(np.float32)
-            # if merge_collinear and len(poly) >= 4:
-            #     poly = self._merge_collinear_vertices(poly, angle_tol_deg=angle_tol_deg, dist_tol=dist_tol)
             cleaned.append(poly.reshape(-1, 1, 2).astype(np.int32))  # for drawing
 
         outlines = self._to_xy_arrays(cleaned)
@@ -286,7 +236,7 @@ class Processor:
 def part_1() -> None:
     # Run the tracer
     img = load_image("PennAir 2024 App Static.png")
-    processor = Processor(img)
+    processor = ProcessorV2(img)
     outlines, debug = processor.process_frame(
         is_bgr=False, # Why does this only work if is_bgr is False?
         return_edge_mask=True,
@@ -326,7 +276,7 @@ def part_2(save: bool = False, output_path: str | None = None) -> None:
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
-            processor = Processor(frame)
+            processor = ProcessorV2(frame)
             outlines, debug = processor.process_frame(
                 is_bgr=True,
                 return_edge_mask=False,
@@ -385,7 +335,7 @@ def part_3(save: bool = False, output_path: str | None = None) -> None:
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
-            processor = Processor(frame)
+            processor = ProcessorV2(frame)
             outlines, debug = processor.process_frame(
                 is_bgr=True,
                 return_edge_mask=False,
