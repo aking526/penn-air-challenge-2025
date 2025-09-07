@@ -46,7 +46,7 @@ The shape detection algorithm for video builds upon the static image processing 
 
 3.  **Output Generation**: The resulting contours and shape centers are overlaid onto each frame, and the processed frames are re-encoded into an output video. This provides a continuous visual trace of the detected shapes throughout the video.
 
-<video src="https://drive.google.com/file/d/1WN-VIYOeLxaGmdzOlZXCz1W7t7Cr8Y3O/view?usp=sharing" controls>
+<video src="https://drive.google.com/file/d/1WN-VIYOeLxaGmdzOlZXCz1W7t7Cr8Y3O/view" controls>
     Your browser does not support the video tag.
 </video>
 
@@ -54,6 +54,6 @@ The shape detection algorithm for video builds upon the static image processing 
 
 Unfortunately, the results are not very good for this part. The algorithm tends to fail to detect the darker parts of the shapes.
 
-<video src="https://drive.google.com/file/d/1kYhO0CldYyLcx0ZEhKiMdBpjOk9MEBJT/view?usp=sharing" controls>
+<video src="https://drive.google.com/file/d/1kYhO0CldYyLcx0ZEhKiMdBpjOk9MEBJT/view" controls>
     Your browser does not support the video tag.
 </video>
