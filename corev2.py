@@ -378,10 +378,10 @@ def part_3(save: bool = False, output_path: str | None = None) -> None:
     cv2.destroyAllWindows()
 
 def part_4() -> None:
-    pass
+    raise NotImplementedError("Part 4 is not implemented")
 
 def part_5() -> None:
-    pass
+    raise NotImplementedError("Part 5 is not implemented")
 
 def part_6() -> None:
-    pass
+    raise NotImplementedError("Part 6 is not implemented")
