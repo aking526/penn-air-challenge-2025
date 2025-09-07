@@ -247,11 +247,14 @@ def part_1() -> None:
     overlay = debug["overlay"]
     overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
 
-    plt.figure(figsize=(8, 8))
-    plt.imshow(overlay_rgb)
-    plt.title("Contours Overlay")
-    plt.axis("off")
-    plt.show()
+    # Save the overlay to file
+    cv2.imwrite("part1_sol.png", overlay)
+
+    # plt.figure(figsize=(8, 8))
+    # plt.imshow(overlay_rgb)
+    # plt.title("Contours Overlay")
+    # plt.axis("off")
+    # plt.show()
 
 # ========== Part 2: Shape Detection on Dynamic Video ==========
 # - Apply the algorithm to the video file ( PennAir 2024 App Dynamic.mp4).
